@@ -24,7 +24,7 @@ export default function HomeScreen() {
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 1,
+      quality: .8, //compress to be 1-2 mb or less 
     });
 
     if (!result.canceled) {
