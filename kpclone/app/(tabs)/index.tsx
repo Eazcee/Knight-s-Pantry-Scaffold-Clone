@@ -13,25 +13,8 @@ import * as ImagePicker from 'expo-image-picker';
 export default function HomeScreen() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [extractedNumbers, setExtractedNumbers] = useState<string | null>(null);
-
-  // Function to list available models
-  const listAvailableModels = async () => {
-    try {
-      const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-      const data = await response.json();
-      console.log('Available Models:', JSON.stringify(data, null, 2));
-      
-      // Extract model names
-      if (data.models) {
-        const modelNames = data.models.map((model: any) => model.name);
-        console.log('Model Names:', modelNames);
-        setExtractedNumbers(`Models: ${modelNames.join(', ')}`);
-      }
-    } catch (error) {
-      console.error('Error listing models:', error);
-    }
-  };
+  const [productLoading, setProductLoading] = useState(false);
+  const [productError, setProductError] = useState<string | null>(null);
 
   const geminiImageAnalyzer = async (base64Image: string) => {
     try {
@@ -68,12 +51,55 @@ export default function HomeScreen() {
       console.log('Gemini API Response:', JSON.stringify(data, null, 2));
       
       const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No numbers found';
-      setExtractedNumbers(extractedText.trim());
-      console.log('Extracted barcode:', extractedText.trim());
+      const barcodeNumber = extractedText.trim();
+      setExtractedNumbers(barcodeNumber);
+      console.log('Extracted barcode:', barcodeNumber);
+      
+      // If we successfully extracted a barcode, look it up
+      if (barcodeNumber && barcodeNumber !== 'No numbers found' && barcodeNumber !== 'Error analyzing image' && barcodeNumber !== 'NO BARCODE') {
+        await lookupProductByBarcode(barcodeNumber);
+      }
     } catch (error) {
       console.error('Error analyzing image:', error);
       setExtractedNumbers('Error analyzing image');
       Alert.alert('Analysis Error', 'Failed to analyze the image. Please try again.');
+    }
+  };
+
+  // Lookup product information by barcode
+  const lookupProductByBarcode = async (barcode: string) => {
+    if (!barcode || barcode === 'No barcode found' || barcode === 'Error extracting barcode') return;
+
+    setProductLoading(true);
+    setProductError(null);
+
+    try {
+      const response = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
+      const data = await response.json();
+      console.log('UPCItemDB API response:', JSON.stringify(data, null, 2));
+
+      if (data.items && data.items.length > 0) {
+        const prod = data.items[0];
+        // TODO: Navigate to confirmProduct screen when route is created
+        Alert.alert('Product Found!', `Title: ${prod.title}\nDescription: ${prod.description || 'No description available'}`);
+        // router.push({
+        //   pathname: '/confirmProduct',
+        //   params: {
+        //     title: prod.title,
+        //     description: prod.description,
+        //     image: prod.images && prod.images[0] ? prod.images[0] : '',
+        //   },
+        // });
+      } else {
+        setProductError('No product found for this barcode.');
+        Alert.alert('Product Not Found', 'No product found for this barcode. Please try another barcode.');
+      }
+    } catch (e) {
+      setProductError('Error fetching product info.');
+      Alert.alert('Lookup Error', 'Failed to fetch product information. Please try again.');
+      console.error('Error fetching product:', e);
+    } finally {
+      setProductLoading(false);
     }
   };
 
@@ -142,10 +168,12 @@ export default function HomeScreen() {
           <ThemedText style={styles.buttonText}>📷 Open Camera</ThemedText>
         </TouchableOpacity>
         
-        {/* List Models Button */}
-        <TouchableOpacity style={styles.cameraButton} onPress={listAvailableModels}>
-          <ThemedText style={styles.buttonText}>🔍 List Available Models</ThemedText>
-        </TouchableOpacity>
+        {/* Loading indicator */}
+        {productLoading && (
+          <ThemedView style={styles.numbersContainer}>
+            <ThemedText>Loading product information...</ThemedText>
+          </ThemedView>
+        )}
         
         {/* Extracted Numbers Display */}
         {extractedNumbers && (
